@@ -28,5 +28,9 @@ class QueueEntryActionRequest(EmptyRequest):
     queue_entry_id: int = Field(ge=1, examples=[15])
 
 
+class QueueStatusResponse(EmptyRequest):
+    status: str = Field(examples=["OPEN"])
+
+
 class StaffActionRequest(EmptyRequest):
     pass

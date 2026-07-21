@@ -1,14 +1,20 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 
 from app.api.errors import not_implemented
+from app.db.session import get_db
 from app.schemas.common import NOT_IMPLEMENTED_RESPONSES
 from app.schemas.staff import (
+    CheckInByQrTokenRequest,
     QueueEntryActionRequest,
-    StaffActionRequest,
     StaffCheckInRequest,
     StaffLoginRequest,
     StaffLoginResponse,
+    StaffActionRequest,
+    QueueStatusResponse,
 )
+from app.schemas.queue import QueueEntryResponse
+from app.services.queue_engine import QueueEngine
 
 
 router = APIRouter(prefix="/staff", tags=["staff"])
@@ -35,53 +41,55 @@ async def get_staff_queue() -> None:
 
 @router.post(
     "/check-in",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def check_in(request: StaffCheckInRequest) -> None:
-    not_implemented()
+async def check_in(request: StaffCheckInRequest, db: Session = Depends(get_db)) -> QueueEntryResponse:
+    if isinstance(request, CheckInByQrTokenRequest):
+        not_implemented()
+    entry = QueueEngine(db).check_in(request.queue_entry_id)
+    return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
 @router.post(
     "/call-next",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def call_next(request: StaffActionRequest) -> None:
-    not_implemented()
+async def call_next(request: StaffActionRequest, db: Session = Depends(get_db)) -> QueueEntryResponse:
+    entry = QueueEngine(db).call_next()
+    return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
 @router.post(
     "/start-service",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def start_service(request: QueueEntryActionRequest) -> None:
-    not_implemented()
+async def start_service(request: QueueEntryActionRequest, db: Session = Depends(get_db)) -> QueueEntryResponse:
+    entry = QueueEngine(db).start_service(request.queue_entry_id)
+    return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
 @router.post(
     "/complete-service",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def complete_service(request: QueueEntryActionRequest) -> None:
-    not_implemented()
+async def complete_service(request: QueueEntryActionRequest, db: Session = Depends(get_db)) -> QueueEntryResponse:
+    entry = QueueEngine(db).complete_service(request.queue_entry_id)
+    return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
 @router.post(
     "/pause",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueStatusResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def pause_queue(request: StaffActionRequest) -> None:
-    not_implemented()
+async def pause_queue(request: StaffActionRequest, db: Session = Depends(get_db)) -> QueueStatusResponse:
+    QueueEngine(db).pause()
+    return QueueStatusResponse(status="PAUSED")
 
 
 @router.post(
     "/resume",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses=NOT_IMPLEMENTED_RESPONSES,
+    responses={200: {"model": QueueStatusResponse}, **NOT_IMPLEMENTED_RESPONSES},
 )
-async def resume_queue(request: StaffActionRequest) -> None:
-    not_implemented()
+async def resume_queue(request: StaffActionRequest, db: Session = Depends(get_db)) -> QueueStatusResponse:
+    QueueEngine(db).resume()
+    return QueueStatusResponse(status="OPEN")
