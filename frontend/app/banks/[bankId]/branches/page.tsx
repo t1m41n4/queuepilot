@@ -26,7 +26,7 @@ export default function BranchesPage() {
     {loading && <LoadingState label="Loading branches..." />}
     {error && <ErrorState message={error} />}
     {!loading && !error && <div className="card-grid">{branches.map((branch) => <Link className="selection-card" href={`/queue?branchId=${branch.id}&branchName=${encodeURIComponent(branch.name)}`} key={branch.id}>
-      <span><strong>{branch.name}</strong><small>{branch.estimated_wait} minute{branch.estimated_wait === 1 ? "" : "s"} estimated wait</small>{branch.recommended && <small className="recommendation-badge">Recommended</small>}</span><span aria-hidden="true">-&gt;</span>
+      <span><strong>{branch.name}</strong><small>{branch.queue_status === "OPEN" ? `${branch.estimated_wait} minute${branch.estimated_wait === 1 ? "" : "s"} estimated wait` : branch.queue_status === "PAUSED" ? "Queue Paused" : "Unavailable"}</small>{branch.recommended && <small className="recommendation-badge">Recommended</small>}</span><span aria-hidden="true">-&gt;</span>
     </Link>)}</div>}
   </Shell>;
 }

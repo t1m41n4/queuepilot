@@ -36,7 +36,12 @@ export function userFacingError(reason: unknown): string {
     return "Your session has expired. Please sign in again.";
   }
   if (reason.status === 404) return "The requested queue or branch is unavailable.";
-  if (reason.status === 409) return "This queue operation is not available right now.";
+  if (reason.status === 409) {
+    if (reason.message.toLowerCase().includes("queue is not open")) {
+      return "This branch queue is currently paused. Please choose another branch.";
+    }
+    return "This queue operation is not available right now.";
+  }
   if (reason.status === 501) return "This feature is not available yet.";
   if (reason.status >= 500) return "The service is temporarily unavailable. Please try again.";
   return reason.message;
@@ -55,7 +60,8 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
 
   const body = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(body?.detail ?? "The request could not be completed.", response.status);
+    const detail = typeof body?.detail === "string" ? body.detail : "The request could not be completed.";
+    throw new ApiError(detail, response.status);
   }
   return body as T;
 }
