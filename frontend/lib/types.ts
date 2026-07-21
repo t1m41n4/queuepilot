@@ -1,5 +1,5 @@
 export type Bank = { id: number; name: string };
-export type Branch = { id: number; name: string; estimated_wait: number; recommended: boolean };
+export type Branch = { id: number; name: string; queue_status: string; estimated_wait: number; recommended: boolean };
 
 export type QueueJoinResponse = {
   queue_entry_id: number;

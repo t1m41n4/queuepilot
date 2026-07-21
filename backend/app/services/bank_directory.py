@@ -35,6 +35,7 @@ class BankDirectory:
             {
                 "id": branch.id,
                 "name": branch.name,
+                "queue_status": branch.queue.status.value if branch.queue else "UNAVAILABLE",
                 "estimated_wait": self._estimated_wait(branch.queue),
                 "recommended": branch.id == recommended_id,
             }

@@ -95,7 +95,7 @@ export default function StaffDashboardPage() {
   function runEntryAction(entry: StaffQueueItem) {
     if (!entry.action || !entry.queue_entry_id) return;
     const path = actionPaths[entry.action];
-    if (path) runOperation(path, { queue_entry_id: entry.queue_entry_id });
+    if (path) runOperation(path, entry.action === "Call Next" ? {} : { queue_entry_id: entry.queue_entry_id });
   }
 
   return <Shell>
