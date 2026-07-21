@@ -7,6 +7,7 @@ from app.api.v1.router import api_router
 from app.db.seed import seed_default_data
 from app.db.session import SessionLocal
 from app.realtime.router import router as realtime_router
+from app.services.assistant import AssistantError
 from app.services.queue_engine import QueueEngineError
 
 @asynccontextmanager
@@ -32,4 +33,9 @@ app.include_router(realtime_router)
 
 @app.exception_handler(QueueEngineError)
 async def queue_engine_error_handler(request: Request, exc: QueueEngineError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(AssistantError)
+async def assistant_error_handler(request: Request, exc: AssistantError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})

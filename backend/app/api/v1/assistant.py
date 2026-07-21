@@ -1,8 +1,9 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 
-from app.api.errors import not_implemented
+from app.db.session import get_db
 from app.schemas.assistant import AssistantChatRequest, AssistantChatResponse
-from app.schemas.common import NOT_IMPLEMENTED_RESPONSES
+from app.services.assistant import QueueOperationsAssistant
 
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -10,8 +11,16 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 @router.post(
     "/chat",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses={200: {"model": AssistantChatResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=AssistantChatResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        502: {"description": "Assistant provider unavailable"},
+        503: {"description": "Assistant is not configured"},
+    },
 )
-async def chat(request: AssistantChatRequest) -> None:
-    not_implemented()
+async def chat(
+    request: AssistantChatRequest,
+    db: Session = Depends(get_db),
+) -> AssistantChatResponse:
+    answer = await QueueOperationsAssistant(db).answer(request.queue_entry_id, request.question)
+    return AssistantChatResponse(answer=answer)
