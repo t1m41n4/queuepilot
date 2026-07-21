@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.db.seed import seed_default_data
 from app.db.session import SessionLocal
+from app.realtime.router import router as realtime_router
 from app.services.queue_engine import QueueEngineError
 
 @asynccontextmanager
@@ -26,6 +27,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(api_router, prefix="/api/v1")
+app.include_router(realtime_router)
 
 
 @app.exception_handler(QueueEngineError)

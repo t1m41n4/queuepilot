@@ -17,6 +17,7 @@ from app.schemas.staff import (
 from app.schemas.queue import QueueEntryResponse
 from app.models.staff import Staff
 from app.services.queue_engine import QueueEngine
+from app.realtime.publisher import publish_entry_update, publish_queue_status
 
 
 router = APIRouter(prefix="/staff", tags=["staff"])
@@ -64,6 +65,7 @@ async def check_in(
     if isinstance(request, CheckInByQrTokenRequest):
         not_implemented()
     entry = QueueEngine(db).check_in(request.queue_entry_id)
+    await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
@@ -77,6 +79,7 @@ async def call_next(
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
     entry = QueueEngine(db).call_next()
+    await publish_entry_update(db, entry, "CALLED")
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
@@ -90,6 +93,7 @@ async def start_service(
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
     entry = QueueEngine(db).start_service(request.queue_entry_id)
+    await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
@@ -103,6 +107,7 @@ async def complete_service(
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
     entry = QueueEngine(db).complete_service(request.queue_entry_id)
+    await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
 
@@ -115,7 +120,8 @@ async def pause_queue(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueStatusResponse:
-    QueueEngine(db).pause()
+    queue = QueueEngine(db).pause()
+    await publish_queue_status(db, queue, "QUEUE_PAUSED")
     return QueueStatusResponse(status="PAUSED")
 
 
@@ -128,5 +134,6 @@ async def resume_queue(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueStatusResponse:
-    QueueEngine(db).resume()
+    queue = QueueEngine(db).resume()
+    await publish_queue_status(db, queue, "QUEUE_RESUMED")
     return QueueStatusResponse(status="OPEN")

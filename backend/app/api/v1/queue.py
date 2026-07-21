@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.common import NOT_IMPLEMENTED_RESPONSES
 from app.services.queue_engine import QueueEngine
+from app.realtime.publisher import publish_entry_update
 from app.schemas.queue import (
     QueueCancellationRequest,
     QueueCancellationResponse,
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/queue", tags=["queue"])
 )
 async def join_queue(request: QueueJoinRequest, db: Session = Depends(get_db)) -> QueueJoinResponse:
     entry = QueueEngine(db).join_queue(request.branch_id, request.customer_name)
+    await publish_entry_update(db, entry, "READY" if entry.status.value == "READY" else "QUEUE_UPDATED")
     return QueueJoinResponse(
         queue_entry_id=entry.id,
         queue_number=entry.queue_number,
@@ -52,5 +54,6 @@ async def cancel_queue_entry(
     request: QueueCancellationRequest,
     db: Session = Depends(get_db),
 ) -> QueueCancellationResponse:
-    QueueEngine(db).cancel_queue_entry(queue_entry_id)
+    entry = QueueEngine(db).cancel_queue_entry(queue_entry_id)
+    await publish_entry_update(db, entry)
     return QueueCancellationResponse(message="Queue cancelled successfully.")

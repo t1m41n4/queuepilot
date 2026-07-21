@@ -34,3 +34,13 @@ export function get<T>(path: string) {
 export function post<T>(path: string, body: unknown) {
   return apiRequest<T>(path, { method: "POST", body: JSON.stringify(body) });
 }
+
+export function websocketUrl(path: string): string {
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!configured || configured.startsWith("/")) {
+    return `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}${path}`;
+  }
+  const url = new URL(configured);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return `${url.protocol}//${url.host}${path}`;
+}
