@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Path, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.common import NOT_IMPLEMENTED_RESPONSES
 from app.services.queue_engine import QueueEngine
 from app.realtime.publisher import publish_entry_update
 from app.schemas.queue import (
@@ -21,7 +20,7 @@ router = APIRouter(prefix="/queue", tags=["queue"])
 
 @router.post(
     "/join",
-    responses={200: {"model": QueueJoinResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueJoinResponse,
 )
 async def join_queue(request: QueueJoinRequest, db: Session = Depends(get_db)) -> QueueJoinResponse:
     entry = QueueEngine(db).join_queue(request.branch_id, request.customer_name)
@@ -36,7 +35,7 @@ async def join_queue(request: QueueJoinRequest, db: Session = Depends(get_db)) -
 
 @router.get(
     "/{queue_entry_id}",
-    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueEntryResponse,
 )
 async def get_queue_entry(
     queue_entry_id: Annotated[int, Path(ge=1)],
@@ -47,7 +46,7 @@ async def get_queue_entry(
 
 @router.post(
     "/{queue_entry_id}/cancel",
-    responses={200: {"model": QueueCancellationResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueCancellationResponse,
 )
 async def cancel_queue_entry(
     queue_entry_id: Annotated[int, Path(ge=1)],

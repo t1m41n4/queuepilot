@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.api.errors import not_implemented
 from app.db.session import get_db
 from app.core.security import authenticate_staff, create_access_token, get_current_staff
-from app.schemas.common import NOT_IMPLEMENTED_RESPONSES
 from app.schemas.staff import (
     CheckInByQrTokenRequest,
     QueueEntryActionRequest,
@@ -15,8 +14,10 @@ from app.schemas.staff import (
     QueueStatusResponse,
 )
 from app.schemas.queue import QueueEntryResponse
+from app.schemas.staff_dashboard import StaffDashboardResponse, StaffQueueItemResponse
 from app.models.staff import Staff
 from app.services.queue_engine import QueueEngine
+from app.services.staff_dashboard import StaffDashboard
 from app.realtime.publisher import publish_entry_update, publish_queue_status
 
 
@@ -43,19 +44,25 @@ async def staff_login(request: StaffLoginRequest, db: Session = Depends(get_db))
     )
 
 
-@router.get("/dashboard", responses=NOT_IMPLEMENTED_RESPONSES)
-async def get_staff_dashboard(current_staff: Staff = Depends(get_current_staff)) -> None:
-    not_implemented()
+@router.get("/dashboard", response_model=StaffDashboardResponse)
+async def get_staff_dashboard(
+    db: Session = Depends(get_db),
+    current_staff: Staff = Depends(get_current_staff),
+) -> StaffDashboardResponse:
+    return StaffDashboardResponse(**StaffDashboard(db).summary(current_staff))
 
 
-@router.get("/queue", responses=NOT_IMPLEMENTED_RESPONSES)
-async def get_staff_queue(current_staff: Staff = Depends(get_current_staff)) -> None:
-    not_implemented()
+@router.get("/queue", response_model=list[StaffQueueItemResponse])
+async def get_staff_queue(
+    db: Session = Depends(get_db),
+    current_staff: Staff = Depends(get_current_staff),
+) -> list[StaffQueueItemResponse]:
+    return [StaffQueueItemResponse(**entry) for entry in StaffDashboard(db).queue_entries(current_staff)]
 
 
 @router.post(
     "/check-in",
-    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueEntryResponse,
 )
 async def check_in(
     request: StaffCheckInRequest,
@@ -71,7 +78,7 @@ async def check_in(
 
 @router.post(
     "/call-next",
-    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueEntryResponse,
 )
 async def call_next(
     request: StaffActionRequest,
@@ -85,7 +92,7 @@ async def call_next(
 
 @router.post(
     "/start-service",
-    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueEntryResponse,
 )
 async def start_service(
     request: QueueEntryActionRequest,
@@ -99,7 +106,7 @@ async def start_service(
 
 @router.post(
     "/complete-service",
-    responses={200: {"model": QueueEntryResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueEntryResponse,
 )
 async def complete_service(
     request: QueueEntryActionRequest,
@@ -113,7 +120,7 @@ async def complete_service(
 
 @router.post(
     "/pause",
-    responses={200: {"model": QueueStatusResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueStatusResponse,
 )
 async def pause_queue(
     request: StaffActionRequest,
@@ -127,7 +134,7 @@ async def pause_queue(
 
 @router.post(
     "/resume",
-    responses={200: {"model": QueueStatusResponse}, **NOT_IMPLEMENTED_RESPONSES},
+    response_model=QueueStatusResponse,
 )
 async def resume_queue(
     request: StaffActionRequest,

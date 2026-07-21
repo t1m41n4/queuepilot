@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ErrorState, LoadingState, PageHeader, Shell } from "../../components/ui";
-import { get } from "../../lib/api";
+import { get, userFacingError } from "../../lib/api";
 import type { Bank } from "../../lib/types";
 
 export default function BanksPage() {
@@ -13,7 +13,7 @@ export default function BanksPage() {
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    get<Bank[]>("/banks").then(setBanks).catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false));
+    get<Bank[]>("/banks").then(setBanks).catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setLoading(false));
   }, []);
 
   return <Shell>
