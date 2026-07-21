@@ -11,6 +11,7 @@ from app.models.staff import Staff
 DEMO_BANK_NAME = "QueuePilot Demo Bank"
 DEMO_BRANCHES = ("QueuePilot CBD", "QueuePilot Westlands")
 DEFAULT_STAFF_EMAIL = "staff@queuepilot.local"
+WESTLANDS_STAFF_EMAIL = "staff.westlands@queuepilot.local"
 DEFAULT_STAFF_PASSWORD = "password123"
 
 
@@ -48,6 +49,16 @@ def seed_default_data(db: Session) -> None:
                 branch_id=branches[0].id,
                 full_name="QueuePilot Demo Staff",
                 email=DEFAULT_STAFF_EMAIL,
+                password_hash=hash_password(DEFAULT_STAFF_PASSWORD),
+            )
+        )
+    westlands_staff = db.scalar(select(Staff).where(Staff.email == WESTLANDS_STAFF_EMAIL))
+    if westlands_staff is None:
+        db.add(
+            Staff(
+                branch_id=branches[1].id,
+                full_name="QueuePilot Westlands Staff",
+                email=WESTLANDS_STAFF_EMAIL,
                 password_hash=hash_password(DEFAULT_STAFF_PASSWORD),
             )
         )
