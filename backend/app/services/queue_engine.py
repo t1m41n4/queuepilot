@@ -115,6 +115,12 @@ class QueueEngine:
             .where(
                 QueueEntry.queue_id == queue.id,
                 QueueEntry.status == QueueEntryStatus.CHECKED_IN,
+                ~select(QueueEvent.id)
+                .where(
+                    QueueEvent.queue_entry_id == QueueEntry.id,
+                    QueueEvent.event_type == QueueEventType.CALLED,
+                )
+                .exists(),
             )
             .order_by(QueueEntry.joined_at, QueueEntry.id)
         )
@@ -129,6 +135,8 @@ class QueueEngine:
         entry = self._entry(queue_entry_id)
         queue = self._require_open(entry.queue)
         self._require_status(entry, QueueEntryStatus.CHECKED_IN)
+        if not self._has_event(entry.id, QueueEventType.CALLED):
+            raise InvalidQueueTransitionError("Queue entry must be called before service starts")
         entry.status = QueueEntryStatus.SERVING
         self._record_event(entry, QueueEventType.SERVICE_STARTED)
         self._recalculate_queue(queue)
@@ -215,11 +223,22 @@ class QueueEngine:
 
     def _entry(self, queue_entry_id: int) -> QueueEntry:
         entry = self.db.scalar(
-            select(QueueEntry).options(joinedload(QueueEntry.queue)).where(QueueEntry.id == queue_entry_id)
+            select(QueueEntry)
+            .options(joinedload(QueueEntry.queue))
+            .where(QueueEntry.id == queue_entry_id)
+            .with_for_update()
         )
         if entry is None:
             raise QueueNotFoundError("Queue entry not found")
         return entry
+
+    def _has_event(self, queue_entry_id: int, event_type: QueueEventType) -> bool:
+        return self.db.scalar(
+            select(QueueEvent.id).where(
+                QueueEvent.queue_entry_id == queue_entry_id,
+                QueueEvent.event_type == event_type,
+            ).limit(1)
+        ) is not None
 
     def _entry_with_context(self, queue_entry_id: int) -> QueueEntry:
         entry = self.db.execute(
