@@ -107,8 +107,9 @@ class QueueEngine:
         self.db.refresh(entry)
         return entry
 
-    def call_next(self) -> QueueEntry:
-        queue = self._single_open_queue(lock=True)
+    def call_next(self, branch_id: int | None = None) -> QueueEntry:
+        queue = self._queue_for_branch(branch_id, lock=True) if branch_id is not None else self._single_open_queue(lock=True)
+        self._require_open(queue)
         entry = self.db.scalar(
             select(QueueEntry)
             .where(
@@ -157,17 +158,19 @@ class QueueEngine:
         self.db.refresh(entry)
         return entry
 
-    def pause(self) -> Queue:
-        queue = self._single_open_queue(lock=True)
+    def pause(self, branch_id: int | None = None) -> Queue:
+        queue = self._queue_for_branch(branch_id, lock=True) if branch_id is not None else self._single_open_queue(lock=True)
+        self._require_open(queue)
         queue.status = QueueStatus.PAUSED
         self.db.commit()
         self.db.refresh(queue)
         return queue
 
-    def resume(self) -> Queue:
-        queue = self.db.scalar(
-            select(Queue).where(Queue.status == QueueStatus.PAUSED).order_by(Queue.id).with_for_update()
-        )
+    def resume(self, branch_id: int | None = None) -> Queue:
+        statement = select(Queue).where(Queue.status == QueueStatus.PAUSED).order_by(Queue.id).with_for_update()
+        if branch_id is not None:
+            statement = statement.where(Queue.branch_id == branch_id)
+        queue = self.db.scalar(statement)
         if queue is None:
             raise QueueNotFoundError("No paused queue is available")
         queue.status = QueueStatus.OPEN

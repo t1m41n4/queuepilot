@@ -18,6 +18,7 @@ from app.schemas.staff_dashboard import StaffDashboardResponse, StaffQueueItemRe
 from app.models.staff import Staff
 from app.services.queue_engine import QueueEngine
 from app.services.staff_dashboard import StaffDashboard
+from app.services.staff_authorization import require_staff_entry, require_staff_queue
 from app.realtime.publisher import publish_entry_update, publish_queue_status
 
 
@@ -71,6 +72,7 @@ async def check_in(
 ) -> QueueEntryResponse:
     if isinstance(request, CheckInByQrTokenRequest):
         not_implemented()
+    require_staff_entry(db, current_staff, request.queue_entry_id)
     entry = QueueEngine(db).check_in(request.queue_entry_id)
     await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
@@ -85,7 +87,8 @@ async def call_next(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
-    entry = QueueEngine(db).call_next()
+    require_staff_queue(db, current_staff)
+    entry = QueueEngine(db).call_next(current_staff.branch_id)
     await publish_entry_update(db, entry, "CALLED")
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
 
@@ -99,6 +102,7 @@ async def start_service(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
+    require_staff_entry(db, current_staff, request.queue_entry_id)
     entry = QueueEngine(db).start_service(request.queue_entry_id)
     await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
@@ -113,6 +117,7 @@ async def complete_service(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueEntryResponse:
+    require_staff_entry(db, current_staff, request.queue_entry_id)
     entry = QueueEngine(db).complete_service(request.queue_entry_id)
     await publish_entry_update(db, entry)
     return QueueEntryResponse(**QueueEngine(db).get_queue_entry(entry.id))
@@ -127,7 +132,8 @@ async def pause_queue(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueStatusResponse:
-    queue = QueueEngine(db).pause()
+    require_staff_queue(db, current_staff)
+    queue = QueueEngine(db).pause(current_staff.branch_id)
     await publish_queue_status(db, queue, "QUEUE_PAUSED")
     return QueueStatusResponse(status="PAUSED")
 
@@ -141,6 +147,7 @@ async def resume_queue(
     db: Session = Depends(get_db),
     current_staff: Staff = Depends(get_current_staff),
 ) -> QueueStatusResponse:
-    queue = QueueEngine(db).resume()
+    require_staff_queue(db, current_staff)
+    queue = QueueEngine(db).resume(current_staff.branch_id)
     await publish_queue_status(db, queue, "QUEUE_RESUMED")
     return QueueStatusResponse(status="OPEN")
