@@ -52,8 +52,13 @@ def get_current_staff(
     )
     settings = get_settings()
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except jwt.InvalidTokenError:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
+            options={"require": ["exp", "iat", "sub"]},
+        )
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         raise credentials_error from None
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
