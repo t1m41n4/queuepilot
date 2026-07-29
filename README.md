@@ -82,6 +82,13 @@ queuepilot/
 └── README.md
 \`\`\`
 
+## Project Documentation
+
+- [Changelog](CHANGELOG.md) — high-level project and phase history.
+- [Development Workflow](DEVELOPMENT_WORKFLOW.md) — the milestone, validation, review, and release process.
+
+The Technical Roadmap and Business Intelligence Roadmap remain the authoritative planning documents for future work. They are maintained as project planning artifacts rather than committed source files in this repository.
+
 ## Prerequisites
 
 For the recommended setup:
