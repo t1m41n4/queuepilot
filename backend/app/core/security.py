@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.staff import Staff
+from app.core.observability import log_event, metrics
 
 
 password_hash = PasswordHash.recommended()
@@ -27,7 +28,9 @@ def hash_password(plain_password: str) -> str:
 def authenticate_staff(db: Session, email: str, password: str) -> Staff | None:
     staff = db.scalar(select(Staff).where(Staff.email == email))
     if staff is None or not verify_password(password, staff.password_hash):
+        metrics.increment("authentication_failures_total")
         return None
+    metrics.increment("authentication_success_total")
     return staff
 
 
@@ -59,12 +62,18 @@ def get_current_staff(
             options={"require": ["exp", "iat", "sub"]},
         )
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
+        metrics.increment("authentication_invalid_tokens_total")
+        log_event("authentication_failed", level=30, reason="invalid_token")
         raise credentials_error from None
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
+        metrics.increment("authentication_invalid_tokens_total")
+        log_event("authentication_failed", level=30, reason="missing_subject")
         raise credentials_error
 
     staff = db.scalar(select(Staff).where(Staff.email == subject))
     if staff is None:
+        metrics.increment("authentication_invalid_tokens_total")
+        log_event("authentication_failed", level=30, reason="staff_not_found")
         raise credentials_error
     return staff

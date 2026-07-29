@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.services.queue_engine import QueueEngine, QueueNotFoundError
+from app.core.observability import log_event
 
 
 class AssistantError(Exception):
@@ -33,6 +34,7 @@ class QueueOperationsAssistant:
 
     async def answer(self, queue_entry_id: int, question: str) -> str:
         if not self.settings.openai_api_key:
+            log_event("assistant_configuration_missing", level=30)
             raise AssistantConfigurationError(
                 "The Queue Operations Assistant is not configured."
             )
@@ -69,7 +71,8 @@ class QueueOperationsAssistant:
                     {"role": "user", "content": prompt},
                 ],
             )
-        except APIError:
+        except APIError as exc:
+            log_event("assistant_provider_error", level=30, exception_type=type(exc).__name__)
             raise AssistantProviderError(
                 "The Queue Operations Assistant provider is unavailable."
             ) from None

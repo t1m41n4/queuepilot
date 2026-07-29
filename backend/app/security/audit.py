@@ -1,20 +1,9 @@
-import logging
-
-
-# Uvicorn configures this logger in the API container, while applications that
-# embed FastAPI can still capture these records through the normal logging tree.
-logger = logging.getLogger("uvicorn.error")
+from app.core.observability import log_event
 
 
 def audit_staff_action(action: str, *, staff_id: int, branch_id: int, success: bool) -> None:
-    logger.info(
-        "staff_action action=%s staff_id=%s branch_id=%s success=%s",
-        action,
-        staff_id,
-        branch_id,
-        success,
-    )
+    log_event("staff_action", action=action, staff_id=staff_id, branch_id=branch_id, success=success)
 
 
 def audit_login(*, email: str, success: bool, client: str) -> None:
-    logger.info("staff_login email=%s client=%s success=%s", email, client, success)
+    log_event("staff_login", email=email, client=client, success=success)

@@ -7,6 +7,7 @@ from app.models.branch import Branch
 from app.models.queue import Queue, QueueStatus
 from app.models.queue_entry import QueueEntry, QueueEntryStatus
 from app.models.queue_event import QueueEvent, QueueEventType
+from app.core.observability import log_event, metrics
 
 
 class QueueEngineError(Exception):
@@ -72,6 +73,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("join_queue", entry)
         return entry
 
     def get_queue_entry(self, queue_entry_id: int) -> dict[str, object]:
@@ -94,6 +96,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("cancel_queue_entry", entry)
         return entry
 
     def check_in(self, queue_entry_id: int) -> QueueEntry:
@@ -105,6 +108,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("check_in", entry)
         return entry
 
     def call_next(self, branch_id: int | None = None) -> QueueEntry:
@@ -129,6 +133,7 @@ class QueueEngine:
         self._record_event(entry, QueueEventType.CALLED)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("call_next", entry)
         return entry
 
     def start_service(self, queue_entry_id: int) -> QueueEntry:
@@ -142,6 +147,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("start_service", entry)
         return entry
 
     def complete_service(self, queue_entry_id: int) -> QueueEntry:
@@ -153,6 +159,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("complete_service", entry)
         return entry
 
     def skip(self, queue_entry_id: int) -> QueueEntry:
@@ -164,6 +171,7 @@ class QueueEngine:
         self._recalculate_queue(queue)
         self.db.commit()
         self.db.refresh(entry)
+        self._record_operation("skip", entry)
         return entry
 
     def pause(self, branch_id: int | None = None) -> Queue:
@@ -172,6 +180,8 @@ class QueueEngine:
         queue.status = QueueStatus.PAUSED
         self.db.commit()
         self.db.refresh(queue)
+        metrics.increment("queue_operations_total")
+        log_event("queue_operation", operation="pause", queue_id=queue.id, branch_id=queue.branch_id)
         return queue
 
     def resume(self, branch_id: int | None = None) -> Queue:
@@ -184,6 +194,8 @@ class QueueEngine:
         queue.status = QueueStatus.OPEN
         self.db.commit()
         self.db.refresh(queue)
+        metrics.increment("queue_operations_total")
+        log_event("queue_operation", operation="resume", queue_id=queue.id, branch_id=queue.branch_id)
         return queue
 
     def recommend_branch(self) -> Branch:
@@ -223,10 +235,7 @@ class QueueEngine:
 
     def _entry(self, queue_entry_id: int) -> QueueEntry:
         entry = self.db.scalar(
-            select(QueueEntry)
-            .options(joinedload(QueueEntry.queue))
-            .where(QueueEntry.id == queue_entry_id)
-            .with_for_update()
+            select(QueueEntry).where(QueueEntry.id == queue_entry_id).with_for_update()
         )
         if entry is None:
             raise QueueNotFoundError("Queue entry not found")
@@ -297,6 +306,17 @@ class QueueEngine:
 
     def _record_event(self, entry: QueueEntry, event_type: QueueEventType) -> None:
         self.db.add(QueueEvent(queue_entry_id=entry.id, event_type=event_type))
+
+    @staticmethod
+    def _record_operation(operation: str, entry: QueueEntry) -> None:
+        metrics.increment("queue_operations_total")
+        log_event(
+            "queue_operation",
+            operation=operation,
+            queue_entry_id=entry.id,
+            queue_id=entry.queue_id,
+            status=entry.status.value,
+        )
 
     def _require_open(self, queue: Queue) -> Queue:
         if queue.status != QueueStatus.OPEN:
