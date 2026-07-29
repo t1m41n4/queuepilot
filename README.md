@@ -114,6 +114,10 @@ Important backend settings:
 | \`JWT_ACCESS_TOKEN_EXPIRE_MINUTES\` | Access-token lifetime | \`30\` |
 | \`OPENAI_API_KEY\` | Assistant API key | *(required for live answers)* |
 | \`OPENAI_MODEL\` | OpenAI model | \`gpt-4o-mini\` |
+| \`ENVIRONMENT\` | Runtime environment; production rejects weak JWT secrets | \`development\` |
+| \`CORS_ALLOWED_ORIGINS\` | Comma-separated browser origins | \`http://localhost:3000,http://127.0.0.1:3000\` |
+| \`MIGRATION_MAX_RETRIES\` | Maximum transient migration attempts at startup | \`10\` |
+| \`MIGRATION_RETRY_DELAY_SECONDS\` | Delay between migration attempts | \`3\` |
 
 The frontend uses:
 
@@ -163,7 +167,7 @@ From the repository root, create the root `.env` from `.env.example` if you need
 docker compose up -d --build
 \`\`\`
 
-The backend image runs `alembic upgrade head` automatically before starting Uvicorn. On a clean clone, Compose creates the database schema and then runs the normal application startup and seed logic without a manual migration step.
+The backend image runs `alembic upgrade head` automatically before starting Uvicorn. It retries transient migration failures using `MIGRATION_MAX_RETRIES` and `MIGRATION_RETRY_DELAY_SECONDS`. Compose waits for PostgreSQL readiness, then the backend readiness check, before starting the frontend. On a clean clone, Compose creates the database schema and then runs the normal application startup and seed logic without a manual migration step.
 
 Services:
 
@@ -178,6 +182,10 @@ Check status:
 docker compose ps
 \`\`\`
 
+The repository also contains a basic CI workflow at `.github/workflows/ci.yml`. It runs backend tests, the frontend production build, and Compose configuration validation on pushes and pull requests.
+
+All three services should report `Up`; PostgreSQL should report `healthy`, and backend/frontend should report `healthy` after their startup grace period. Inspect startup diagnostics with `docker compose logs --tail=100 backend`.
+
 Stop the stack:
 
 \`\`\`powershell
@@ -185,6 +193,8 @@ docker compose down
 \`\`\`
 
 PostgreSQL data is stored in the `postgres_data` volume. Use `docker compose down -v` only when intentionally removing persisted data; removing the volume causes migrations and seed data to run again on the next startup.
+
+The frontend public API URL is passed to the Next.js production build through `NEXT_PUBLIC_API_BASE_URL` in the root `.env`. Change it before `docker compose up -d --build` when the browser must reach a non-local backend.
 
 ## Running the application without Docker
 
@@ -204,6 +214,39 @@ With Compose, migrations run automatically in the backend entrypoint before Uvic
 \`\`\`powershell
 docker compose exec backend alembic upgrade head
 \`\`\`
+
+If migrations fail, the backend exits after the configured retry limit and Compose marks it unhealthy. Fix the configuration or database state, then restart with `docker compose up -d backend`.
+
+## Backup, restore, and rollback
+
+Create a logical PostgreSQL backup while the stack is running:
+
+\`\`\`powershell
+.\\scripts\\backup-db.ps1
+\`\`\`
+
+This writes a timestamped SQL dump under `backups/`. Store backups outside the repository and protect them as sensitive data.
+
+Restore a dump only during a planned recovery window. Restore replaces database objects contained in the dump:
+
+\`\`\`powershell
+.\\scripts\\restore-db.ps1 -BackupFile .\\backups\\queuepilot-YYYYMMDD-HHMMSS.sql -ConfirmRestore
+docker compose restart backend frontend
+\`\`\`
+
+For an application rollback, check out the last known-good commit or image tag and run `docker compose up -d --build`. Preserve the PostgreSQL volume. Do not run `docker compose down -v` during an application rollback because that permanently removes the database volume. Database migrations are forward-only in this MVP; restore a compatible backup before rolling back across an incompatible schema change.
+
+## Clean-clone deployment checklist
+
+1. Install Docker Desktop with Compose support.
+2. Clone the repository and enter its directory.
+3. Copy `.env.example` to `.env` and replace production secrets, especially `JWT_SECRET_KEY`.
+4. Run `docker compose up -d --build`.
+5. Run `docker compose ps` and wait for healthy backend/frontend status.
+6. Verify `http://localhost:8000/api/v1/health`, `/api/v1/health/live`, `/api/v1/health/ready`, and `http://localhost:3000`.
+7. Open Swagger at `http://localhost:8000/docs` and use the documented demo account for a pilot check.
+
+No manual Alembic command is required for a clean Docker deployment.
 
 The initial migration creates the MVP persistence tables. Application startup seeds demo records; it does not replace migration management.
 
@@ -235,7 +278,8 @@ http://localhost:8000/openapi.json
 
 The API is versioned under \`/api/v1\`. Endpoint groups include:
 
-- Health: \`GET /api/v1/health\`
+- Health: \`GET /api/v1/health\`, \`GET /api/v1/health/live\`, \`GET /api/v1/health/ready\`
+- Metrics: \`GET /api/v1/metrics\`
 - Banks and branches
 - Customer queue join, status, and cancellation
 - Staff login, dashboard, queue operations, pause, and resume

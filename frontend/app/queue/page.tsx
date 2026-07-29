@@ -16,6 +16,8 @@ export default function QueuePage() {
   const [loading, setLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string>();
   const [assistantError, setAssistantError] = useState<string>();
@@ -41,7 +43,6 @@ export default function QueuePage() {
     let socket: WebSocket | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
-
     const connect = () => {
       if (stopped) return;
       setConnectionState("connecting");
@@ -51,48 +52,33 @@ export default function QueuePage() {
         try {
           const update = JSON.parse(message.data) as { event?: string; state?: { status?: string } };
           if (!["QUEUE_UPDATED", "READY", "CALLED", "QUEUE_PAUSED", "QUEUE_RESUMED"].includes(update.event ?? "")) return;
-          if (update.event === "QUEUE_PAUSED" || update.event === "QUEUE_RESUMED") {
-            setStatus((current) => current ? { ...current, status: update.state?.status ?? current.status } : current);
-          } else if (queueEntryId) {
-            setStatusLoading(true);
-            get<QueueStatusResponse>(`/queue/${queueEntryId}`).then(setStatus).catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setStatusLoading(false));
-          }
-        } catch {
-          setConnectionError("Received an invalid queue update.");
-        }
+          if (update.event === "QUEUE_PAUSED" || update.event === "QUEUE_RESUMED") setStatus((current) => current ? { ...current, status: update.state?.status ?? current.status } : current);
+          else if (queueEntryId) { setStatusLoading(true); get<QueueStatusResponse>(`/queue/${queueEntryId}`).then(setStatus).catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setStatusLoading(false)); }
+        } catch { setConnectionError("Received an invalid queue update."); }
       };
       socket.onerror = () => { setConnectionState("disconnected"); setConnectionError("Live queue updates are unavailable."); };
-      socket.onclose = () => {
-        setConnectionState("disconnected");
-        if (!stopped) reconnectTimer = setTimeout(connect, 3000);
-      };
+      socket.onclose = () => { setConnectionState("disconnected"); if (!stopped) reconnectTimer = setTimeout(connect, 3000); };
     };
-
     connect();
     return () => { stopped = true; if (reconnectTimer) clearTimeout(reconnectTimer); socket?.close(); };
   }, [branchId, queueEntryId]);
 
   function joinQueue() {
     if (!branchId || !customerName.trim()) return;
-    setLoading(true); setError(undefined);
-    post<QueueJoinResponse>("/queue/join", { branch_id: branchId, customer_name: customerName.trim() })
-      .then((response) => { setQueueEntryId(response.queue_entry_id); setStatus(response); })
-      .catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setLoading(false));
+    setLoading(true); setError(undefined); setNotice(undefined);
+    post<QueueJoinResponse>("/queue/join", { branch_id: branchId, customer_name: customerName.trim() }).then((response) => { setQueueEntryId(response.queue_entry_id); setStatus(response); setNotice("You are in the queue. We’ll keep your status up to date here."); }).catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setLoading(false));
   }
 
   function cancelQueue() {
     if (!queueEntryId) return;
-    setLoading(true); setError(undefined);
-    post<{ message: string }>(`/queue/${queueEntryId}/cancel`, {})
-      .then(() => setStatus((current) => current && { ...current, status: "CANCELLED" }))
-      .catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setLoading(false));
+    setLoading(true); setError(undefined); setNotice(undefined);
+    post<{ message: string }>(`/queue/${queueEntryId}/cancel`, {}).then(() => { setStatus((current) => current && { ...current, status: "CANCELLED" }); setNotice("Your queue entry has been cancelled."); }).catch((reason: unknown) => setError(userFacingError(reason))).finally(() => setLoading(false));
   }
 
   function askAssistant() {
     if (!queueEntryId || !question.trim()) return;
     setAssistantLoading(true); setAssistantError(undefined);
-    post<AssistantResponse>("/assistant/chat", { queue_entry_id: queueEntryId, question: question.trim() })
-      .then((response) => setAnswer(response.answer)).catch((reason: unknown) => setAssistantError(userFacingError(reason))).finally(() => setAssistantLoading(false));
+    post<AssistantResponse>("/assistant/chat", { queue_entry_id: queueEntryId, question: question.trim() }).then((response) => setAnswer(response.answer)).catch((reason: unknown) => setAssistantError(userFacingError(reason))).finally(() => setAssistantLoading(false));
   }
 
   const joinedStatus = status && "queue_number" in status ? status : undefined;
@@ -100,9 +86,10 @@ export default function QueuePage() {
     <Link className="back-link" href="/banks">← Change branch</Link>
     <PageHeader eyebrow="Customer · Queue" title={joinedStatus ? "Your queue status" : "Join a queue"} description={branchName ? `Selected branch: ${branchName}` : "Select a branch before joining."} />
     {error && <ErrorState message={error} />}
+    {notice && <p className="state-message success-message" role="status">{notice}</p>}
     {statusLoading && <p className="connection-status" role="status">Refreshing queue status…</p>}
     {connectionError && <ErrorState message={connectionError} />}
     {branchId && <p className="connection-status" role="status">Live updates: {connectionState}</p>}
-    {!joinedStatus ? <section className="panel form-panel"><label htmlFor="customer-name">Customer name</label><input id="customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" /><button type="button" onClick={joinQueue} disabled={loading || !branchId || !customerName.trim()}>{loading ? "Joining…" : "Join Queue"}</button></section> : <><section className="status-grid">{[[("Queue number"), joinedStatus.queue_number], [("Branch"), "branch_name" in joinedStatus ? joinedStatus.branch_name : branchName], [("Position"), "position" in joinedStatus ? joinedStatus.position : "—"], [("Estimated wait"), "estimated_wait" in joinedStatus ? `${joinedStatus.estimated_wait} minutes` : "—"], [("Status"), joinedStatus.status]].map(([label, value]) => <div className="metric-card" key={label as string}><span>{label}</span><strong>{value}</strong></div>)}</section><button className="danger-button" type="button" onClick={cancelQueue} disabled={loading || joinedStatus.status === "CANCELLED"}>{loading ? "Updating…" : "Cancel Queue"}</button><AssistantPanel question={question} setQuestion={setQuestion} onSend={askAssistant} answer={answer} loading={assistantLoading} error={assistantError} /></>}
+    {!joinedStatus ? <section className="panel form-panel"><label htmlFor="customer-name">Customer name</label><input id="customer-name" autoComplete="name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Enter your name" /><button type="button" onClick={joinQueue} disabled={loading || !branchId || !customerName.trim()}>{loading ? "Joining…" : "Join Queue"}</button></section> : <><section className="status-grid">{[["Queue number", joinedStatus.queue_number], ["Branch", "branch_name" in joinedStatus ? joinedStatus.branch_name : branchName], ["Position", "position" in joinedStatus ? joinedStatus.position : "—"], ["Estimated wait", "estimated_wait" in joinedStatus ? `${joinedStatus.estimated_wait} minutes` : "—"], ["Status", joinedStatus.status]].map(([label, value]) => <div className="metric-card" key={label as string}><span>{label}</span><strong>{value}</strong></div>)}</section><button className="danger-button" type="button" onClick={() => setConfirmCancel(true)} disabled={loading || joinedStatus.status === "CANCELLED"}>{loading ? "Updating…" : "Cancel Queue"}</button>{confirmCancel && <section className="panel confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby="cancel-title" aria-describedby="cancel-description"><h2 id="cancel-title">Cancel your queue entry?</h2><p id="cancel-description" className="muted">You will leave this queue and need to join again if you still need service.</p><div className="button-row"><button className="secondary-link" type="button" autoFocus onClick={() => setConfirmCancel(false)}>Keep my place</button><button className="danger-button" type="button" onClick={() => { setConfirmCancel(false); cancelQueue(); }}>Confirm cancellation</button></div></section>}<AssistantPanel question={question} setQuestion={setQuestion} onSend={askAssistant} answer={answer} loading={assistantLoading} error={assistantError} /></>}
   </Shell>;
 }
