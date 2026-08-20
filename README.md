@@ -39,8 +39,7 @@ The application separates presentation, persistence, and queue decisions:
 
 ## Project architecture
 
-\`\`\`text
-Browser (Next.js)
+(Next.js)
         │ REST + WebSocket
         ▼
 FastAPI API layer ─── Authentication / schemas
@@ -52,14 +51,13 @@ FastAPI API layer ─── Authentication / schemas
                          │
                          ▼
                     PostgreSQL
-\`\`\`
+
 
 The frontend does not calculate queue position, ETA, readiness, or valid queue transitions. Those values are returned by the backend.
 
 ## Repository structure
 
-\`\`\`text
-queuepilot/
+
 ├── backend/
 │   ├── alembic/              # Database migrations
 │   ├── app/
@@ -80,7 +78,6 @@ queuepilot/
 ├── docs/
 ├── docker-compose.yml
 └── README.md
-\`\`\`
 
 ## Prerequisites
 
@@ -94,66 +91,6 @@ For running without Docker:
 - Node.js 22 or newer and npm
 - PostgreSQL 16 or a compatible PostgreSQL installation
 
-## Environment configuration
-
-Three environment-file scopes are used:
-
-- Root `.env`: Docker Compose interpolation for PostgreSQL credentials, exposed ports, JWT settings, and OpenAI settings. Start from the root `.env.example` when customizing Compose.
-- `backend/.env`: settings read by FastAPI or Alembic directly without Docker. Start from `backend/.env.example`.
-- `frontend/.env.local`: Next.js browser configuration for non-Docker development. Start from `frontend/.env.example`.
-
-These files are separate because Docker Compose and local application processes load configuration from different locations. Never commit real secrets.
-
-Important backend settings:
-
-| Variable | Purpose | Example |
-| --- | --- | --- |
-| \`DATABASE_URL\` | PostgreSQL connection | \`postgresql+psycopg://queuepilot:queuepilot@localhost:5432/queuepilot\` |
-| \`JWT_SECRET_KEY\` | JWT signing secret | \`change-me-in-production\` |
-| \`JWT_ALGORITHM\` | JWT algorithm | \`HS256\` |
-| \`JWT_ACCESS_TOKEN_EXPIRE_MINUTES\` | Access-token lifetime | \`30\` |
-| \`OPENAI_API_KEY\` | Assistant API key | *(required for live answers)* |
-| \`OPENAI_MODEL\` | OpenAI model | \`gpt-4o-mini\` |
-
-The frontend uses:
-
-\`\`\`text
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
-\`\`\`
-
-Do not commit real secrets.
-
-## Local setup
-
-### Backend
-
-From \`backend/\`:
-
-\`\`\`powershell
-python -m venv .venv
-.\\.venv\\Scripts\\Activate.ps1
-pip install -r requirements.txt
-\`\`\`
-
-With PostgreSQL running and \`DATABASE_URL\` configured:
-
-\`\`\`powershell
-alembic upgrade head
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-\`\`\`
-
-Application startup seeds deterministic demo data when the database is available.
-
-### Frontend
-
-From \`frontend/\`:
-
-\`\`\`powershell
-npm ci
-npm run dev
-\`\`\`
-
-Open http://localhost:3000.
 
 ## Running the application with Docker Compose
 
@@ -164,13 +101,6 @@ docker compose up -d --build
 \`\`\`
 
 The backend image runs `alembic upgrade head` automatically before starting Uvicorn. On a clean clone, Compose creates the database schema and then runs the normal application startup and seed logic without a manual migration step.
-
-Services:
-
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- Swagger: http://localhost:8000/docs
-- PostgreSQL: localhost:5432
 
 Check status:
 
@@ -223,25 +153,6 @@ Startup seeding creates or preserves:
 
 Passwords are stored as hashes. Change demo credentials and JWT secrets for any non-demo deployment.
 
-## Available API documentation
-
-Interactive Swagger documentation:
-
-http://localhost:8000/docs
-
-Raw OpenAPI:
-
-http://localhost:8000/openapi.json
-
-The API is versioned under \`/api/v1\`. Endpoint groups include:
-
-- Health: \`GET /api/v1/health\`
-- Banks and branches
-- Customer queue join, status, and cancellation
-- Staff login, dashboard, queue operations, pause, and resume
-- Assistant: \`POST /api/v1/assistant/chat\`
-- WebSocket: \`/ws/queue/{branch_id}\`
-
 ## Application walkthrough
 
 ### Customer flow
@@ -263,22 +174,6 @@ The API is versioned under \`/api/v1\`. Endpoint groups include:
 4. Use backend-provided actions such as Check In, Call Next, and Complete Service.
 5. Pause or resume the queue.
 6. Dashboard data refreshes from backend responses and supported WebSocket events.
-
-## Testing and verification
-
-Useful checks:
-
-\`\`\`powershell
-Invoke-RestMethod http://localhost:8000/api/v1/health
-
-cd frontend
-npm run build
-
-cd ..
-docker compose ps
-\`\`\`
-
-The project has been verified through the milestone workflow with API, authentication, queue transition, WebSocket, Swagger, frontend build, and Docker Compose checks. Invalid queue transitions are intentionally rejected by the Queue Engine.
 
 ## Known limitations
 
